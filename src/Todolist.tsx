@@ -1,13 +1,10 @@
-import React, {useState, KeyboardEvent, ChangeEvent} from "react";
+import React, {ChangeEvent, useCallback} from "react";
 import {FilterValuesType, TaskType} from "./App";
 import AddItemForm from "./AddItemForm";
 import EditableSpan from "./EditableSpan";
-import {Button, IconButton} from "@material-ui/core";
+import {Button, Checkbox, IconButton} from "@material-ui/core";
 import {Delete} from "@material-ui/icons";
-import {Checkbox} from "@material-ui/core";
-import {useDispatch, useSelector} from "react-redux";
-import {AppRootStateType} from "./state/store";
-import {TodoListType} from "./AppWithRedux";
+import {Task} from "./Task";
 
 type TodolistPropsType = {
     todoListID: string
@@ -23,41 +20,49 @@ type TodolistPropsType = {
     changeTodoListTitle: (newTitle: string, todoListID: string) => void
 }
 
-export function TodoList(props: TodolistPropsType) {
+export const TodoList = React.memo((props: TodolistPropsType) => {
 
-    const todolist = useSelector<AppRootStateType, TodoListType>(state => state.todolists
-        .filter(el => el.id === props.todoListID)[0]);
-    const tasks2 = useSelector<AppRootStateType, Array<TaskType>>(state => state.tasks[props.todoListID]);
-    const dispatch = useDispatch();
+    // тут просто показано, что благодаря редаксу и контексту, который он создает, до стора
+    // (до данных и до диспача) можно добраться из любой компоненты, если она находится в обертке провайдера
+    // const todolist = useSelector<AppRootStateType, TodoListType>(state => state.todolists
+    //     .filter(el => el.id === props.todoListID)[0]);
+    // const tasks2 = useSelector<AppRootStateType, Array<TaskType>>(state => state.tasks[props.todoListID]);
+    // const dispatch = useDispatch();
 
-    const addTask = (title: string) => props.addTask(title, props.todoListID);
+
+    // useCallback нужен для предотвращения ненужных повторных перерисовок компоненты.
+    // он как бы запомнил, закешировал этот колбэк. если этот колбэк передаётся куда-то через пропсы
+    // он не вызывает перерисовку этой компоненты. useCallback сравнивает закэшированный колбэк с колбэком,
+    // который в пропсах - колбэк тот же? тогда не перерисовываем компоненту. useCallback принимает 2 параметра:
+    // 1 - тот самый отслеживаемый колбэк и 2 - массив зависимостей. все колбэки, которые пробрасываются в
+    // дочернюю компоненту, должны оборачиваться useCallback'ом
+    const addTask = useCallback((title: string) => props.addTask(title, props.todoListID), [props]);
 
     const removeTodoList = () => props.removeTodoList(props.todoListID);
-    const setAllFilter = () => props.changeTodoListFilter("all", props.todoListID);
-    const setActiveFilter = () => props.changeTodoListFilter("active", props.todoListID);
-    const setCompletedFilter = () => props.changeTodoListFilter("completed", props.todoListID);
-    const changeTodoListTitle = (title: string) => props.changeTodoListTitle(title, props.todoListID);
+    const setAllFilter = useCallback(() => props.changeTodoListFilter("all", props.todoListID), [props.changeTodoListFilter, props.todoListID]);
+    const setActiveFilter = useCallback(() => props.changeTodoListFilter("active", props.todoListID), [props.changeTodoListFilter, props.todoListID]);
+    const setCompletedFilter = useCallback(() => props.changeTodoListFilter("completed", props.todoListID), [props.changeTodoListFilter, props.todoListID]);
+    const changeTodoListTitle = useCallback((title: string) => props.changeTodoListTitle(title, props.todoListID),[props.changeTodoListTitle, props.todoListID]);
 
-    const tasks = props.tasks.map(t => {
-        const removeTask = () => props.removeTask(t.id, props.todoListID);
-        const changeTaskStatus = (e: ChangeEvent<HTMLInputElement>) =>
-            props.changeTaskStatus(t.id, e.currentTarget.checked, props.todoListID);
-        const changeTaskTitle = (newTitle: string) =>
-            props.changeTaskTitle(t.id, newTitle, props.todoListID);
-        return (
-            <li key={t.id} className={t.isDone ? "isDone" : ""}>
-                <Checkbox
-                    color={"secondary"}
-                    checked={t.isDone}
-                    onChange={changeTaskStatus}
-                />
-                <IconButton onClick={removeTask}>
-                    <Delete/>
-                </IconButton>
-                <EditableSpan title={t.title} changeTitle={changeTaskTitle}/>
-            </li>
-        )
-    });
+    let tasksForTodoList = props.tasks;
+    if (props.filter === "active") {
+        tasksForTodoList = tasksForTodoList.filter(t => !t.isDone)
+    }
+    if (props.filter === "completed") {
+        tasksForTodoList = tasksForTodoList.filter(t => t.isDone)
+    }
+
+    const removeTask = useCallback((taskId: string) => props.removeTask(taskId, props.todoListID),[props.removeTask]);
+    const changeTaskStatus = useCallback((taskId: string, newIsDoneValue: boolean) =>
+        props.changeTaskStatus(taskId, newIsDoneValue, props.todoListID),[props.changeTaskStatus, props.todoListID]);
+    const changeTaskTitle = useCallback((taskId: string, newTitle: string) =>
+        props.changeTaskTitle(taskId, newTitle, props.todoListID),[props.changeTaskTitle, props.todoListID]);
+
+    const tasks = tasksForTodoList.map(t => <Task task={t}
+                                                  key={t.id}
+                                                  removeTask={removeTask}
+                                                  changeTaskStatus={changeTaskStatus}
+                                                  changeTaskTitle={changeTaskTitle}/>);
 
     return (
         <div>
@@ -90,4 +95,4 @@ export function TodoList(props: TodolistPropsType) {
             </ul>
         </div>
     )
-}
+});
